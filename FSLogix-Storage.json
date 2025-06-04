@@ -1,0 +1,189 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.33.93.31351",
+      "templateHash": "667889718912314253"
+    }
+  },
+  "parameters": {
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the storage account."
+      }
+    },
+    "kerberosDomainName": {
+      "type": "string",
+      "metadata": {
+        "description": "The Active Directory domain name for Azure AD Kerberos authentication (e.g., corp.contoso.com)."
+      }
+    },
+    "kerberosDomainGuid": {
+      "type": "string",
+      "metadata": {
+        "description": "The GUID of the Active Directory domain (e.g., 12345678-90ab-cdef-1234-567890abcdef)."
+      }
+    },
+    "smbShareContributorGroupOid": {
+      "type": "string",
+      "metadata": {
+        "description": "The Object ID of the group to assign Storage File Data SMB Share Contributor."
+      }
+    },
+    "smbShareElevatedContributorGroupOid": {
+      "type": "string",
+      "metadata": {
+        "description": "The Object ID of the group to assign Storage File Data SMB Share Elevated Contributor."
+      }
+    },
+    "vnetResourceGroup": {
+      "type": "string",
+      "defaultValue": "Core-Services",
+      "metadata": {
+        "description": "Resource group of the vNet for the Private Endpoint"
+      }
+    },
+    "vnetName": {
+      "type": "string",
+      "defaultValue": "Master-vNet",
+      "metadata": {
+        "description": "Name of the vNet for the Private Endpoint"
+      }
+    },
+    "subnetName": {
+      "type": "string",
+      "defaultValue": "Storage",
+      "metadata": {
+        "description": "Subnet name for the Private Endpoint"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[parameters('storageAccountName')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "allowBlobPublicAccess": false,
+        "publicNetworkAccess": "Disabled",
+        "minimumTlsVersion": "TLS1_2",
+        "azureFilesIdentityBasedAuthentication": {
+          "directoryServiceOptions": "AADKERB",
+          "activeDirectoryProperties": {
+            "domainName": "[parameters('kerberosDomainName')]",
+            "domainGuid": "[parameters('kerberosDomainGuid')]"
+          },
+          "sharePermissions": "Share"
+        },
+        "networkAcls": {
+          "defaultAction": "Deny",
+          "bypass": "AzureServices"
+        },
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', 'profiles')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices', parameters('storageAccountName'), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2023-01-01",
+      "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', 'redirection')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices', parameters('storageAccountName'), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.Storage/storageAccounts/{0}', parameters('storageAccountName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('smbShareContributorGroupOid'), 'FileShareContributor')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb')]",
+        "principalId": "[parameters('smbShareContributorGroupOid')]",
+        "principalType": "Group"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.Storage/storageAccounts/{0}', parameters('storageAccountName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('smbShareElevatedContributorGroupOid'), 'FileShareElevatedContributor')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a7264617-510b-434b-a828-9731dc254ea7')]",
+        "principalId": "[parameters('smbShareElevatedContributorGroupOid')]",
+        "principalType": "Group"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}-file-pe', parameters('storageAccountName'))]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "subnet": {
+          "id": "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('vnetResourceGroup')), 'Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetName'))]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "storageAccountFileConnection",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "groupIds": [
+                "file"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "storageAccountId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+    },
+    "profilesShareName": {
+      "type": "string",
+      "value": "profiles"
+    },
+    "redirectionShareName": {
+      "type": "string",
+      "value": "redirection"
+    },
+    "privateEndpointId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-file-pe', parameters('storageAccountName')))]"
+    }
+  }
+}
