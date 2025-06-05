@@ -1,8 +1,10 @@
 // Parameters
 param sessionHostPrefix string = 'AVD'
 param numberOfHosts int = 2
+
 @secure()
 param adminPassword string
+
 param adminUsername string = 'AVD-Admin'
 param hostPoolRegistrationInfoToken string = 'Enter HostPool Registration Key here'
 
@@ -10,6 +12,10 @@ param hostPoolRegistrationInfoToken string = 'Enter HostPool Registration Key he
 param vNetResourceGroup string = 'Core-Services'
 param vNetName string = 'Master-vNet'
 param subnetName string = 'AzureVirtualDesktop'
+
+// Parameter for the SessionHostPrep script URL
+@description('URL of the SessionHostPrep.ps1 script')
+param sessionHostPrepScriptUrl string = 'https://raw.githubusercontent.com/andrew-kemp/CloudPAW/refs/heads/main/SessionHostPrep.ps1'
 
 var modulesURL = 'https://wvdportalstorageblob.blob.${environment().suffixes.storage}/galleryartifacts/Configuration_1.0.02797.442.zip'
 
@@ -24,7 +30,7 @@ resource existingSubnet 'Microsoft.Network/virtualNetworks/subnets@2021-05-01' e
   scope: resourceGroup(vNetResourceGroup)
 }
 
-//Create the NICs for the VMs
+// Create the NICs for the VMs
 resource nic 'Microsoft.Network/networkInterfaces@2020-11-01' = [for i in range(0, numberOfHosts): {
   name: '${sessionHostPrefix}-${i}-nic'
   location: resourceGroup().location
@@ -43,7 +49,7 @@ resource nic 'Microsoft.Network/networkInterfaces@2020-11-01' = [for i in range(
   }
 }]
 
-//Create the VMs
+// Create the VMs
 resource VM 'Microsoft.Compute/virtualMachines@2020-12-01' = [for i in range(0, numberOfHosts): {
   name: '${sessionHostPrefix}-${i}'
   location: resourceGroup().location
@@ -88,7 +94,7 @@ resource VM 'Microsoft.Compute/virtualMachines@2020-12-01' = [for i in range(0, 
   }
 }]
 
-//Join the VMs to Entra and Enroll in Intune
+// Join the VMs to Entra and Enroll in Intune
 resource entraIdJoin 'Microsoft.Compute/virtualMachines/extensions@2021-11-01' = [for i in range(0, numberOfHosts): {
   parent: VM[i]
   name: '${sessionHostPrefix}-${i}-EntraJoinEntrollIntune'
@@ -105,7 +111,7 @@ resource entraIdJoin 'Microsoft.Compute/virtualMachines/extensions@2021-11-01' =
   }
 }]
 
-//Install the Guest Attestation Extension
+// Install the Guest Attestation Extension
 resource guestAttestationExtension 'Microsoft.Compute/virtualMachines/extensions@2024-07-01' = [for i in range(0, numberOfHosts): {
   parent: VM[i]
   name: '${sessionHostPrefix}-${i}-guestAttestationExtension'
@@ -121,7 +127,7 @@ resource guestAttestationExtension 'Microsoft.Compute/virtualMachines/extensions
   ]
 }]
 
-//run some preparation on the VMs to remove any windows apps and also enable cloud kerberos
+// Run some preparation on the VMs to remove any windows apps and also enable cloud kerberos
 resource SessionPrep 'Microsoft.Compute/virtualMachines/extensions@2021-03-01' = [for i in range(0, numberOfHosts): {
   parent: VM[i]
   name: '${sessionHostPrefix}-${i}-SessionPrep'
@@ -133,7 +139,7 @@ resource SessionPrep 'Microsoft.Compute/virtualMachines/extensions@2021-03-01' =
     autoUpgradeMinorVersion: true
     settings: {
       fileUris: [
-        'https://raw.githubusercontent.com/andrew-kemp/CloudPAW/refs/heads/main/SessionHostPrep.ps1'
+        sessionHostPrepScriptUrl
       ]
       commandToExecute: 'powershell -ExecutionPolicy Unrestricted -File SessionHostPrep.ps1'
     }
