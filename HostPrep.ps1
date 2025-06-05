@@ -7,8 +7,8 @@ $ParentPath = "HKLM:\SOFTWARE\FSLogix"
 # Define the full registry path for FSLogix Profiles
 $RegPath = "$ParentPath\Profiles"
 # Define the network locations for profile and redirection storage
-$ProfilesPath = "\\kempystoragev1.file.core.windows.net\profiles"
-$RedirectionPath = "\\kempystoragev1.file.core.windows.net\redirections"
+$ProfilesPath = "\\kempystoragev2.file.core.windows.net\profiles"
+$RedirectionPath = "\\kempystoragev2.file.core.windows.net\redirections"
 # Check if the FSLogix registry parent key exists
 if (-not (Test-Path $ParentPath)) {
     # If not, create the FSLogix registry key under HKLM:\SOFTWARE
