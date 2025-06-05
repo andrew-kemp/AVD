@@ -61,7 +61,7 @@ resource fileShareProfiles 'Microsoft.Storage/storageAccounts/fileServices/share
 }
 
 resource fileShareRedirection 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-01-01' = {
-  name: 'redirection'
+  name: 'redirections'
   parent: fileService
 }
 
